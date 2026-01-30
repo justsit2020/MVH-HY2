@@ -1,6 +1,5 @@
 set -euo pipefail
 
-# ---- 1) 准备本地 node（只下载一次）----
 NODE_DIR=".localnode/node"
 if [ -x "$NODE_DIR/bin/node" ]; then
   export PATH="$PWD/$NODE_DIR/bin:$PATH"
@@ -41,7 +40,6 @@ fi
 
 echo "[env] node=$(node -v)"
 
-# ---- 2) 可选：你的脚本会用到 openssl，没有的话会失败 ----
 if ! command -v openssl >/dev/null 2>&1; then
   echo "[fatal] openssl not found in this image. need an image with openssl."
   exit 1
