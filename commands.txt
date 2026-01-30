@@ -1,0 +1,51 @@
+set -euo pipefail
+
+# ---- 1) 准备本地 node（只下载一次）----
+NODE_DIR=".localnode/node"
+if [ -x "$NODE_DIR/bin/node" ]; then
+  export PATH="$PWD/$NODE_DIR/bin:$PATH"
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[node] not found, bootstrapping local node..."
+
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64) NODE_ARCH="x64" ;;
+    aarch64|arm64) NODE_ARCH="arm64" ;;
+    *) echo "[node] unsupported arch: $ARCH"; exit 1 ;;
+  esac
+
+  NODE_VER="20.11.1"
+  TARBALL="node-v${NODE_VER}-linux-${NODE_ARCH}.tar.gz"
+  URL="https://nodejs.org/dist/v${NODE_VER}/${TARBALL}"
+
+  mkdir -p .localnode
+  cd .localnode
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL "$URL" -o node.tgz
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O node.tgz "$URL"
+  else
+    echo "[node] need curl or wget to download node"; exit 1
+  fi
+
+  tar -xzf node.tgz
+  rm -f node.tgz
+  mv "node-v${NODE_VER}-linux-${NODE_ARCH}" node
+  cd ..
+
+  export PATH="$PWD/$NODE_DIR/bin:$PATH"
+fi
+
+echo "[env] node=$(node -v)"
+
+# ---- 2) 可选：你的脚本会用到 openssl，没有的话会失败 ----
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "[fatal] openssl not found in this image. need an image with openssl."
+  exit 1
+fi
+
+# ---- 3) 直接跑（不需要 npm install）----
+exec node index.js
