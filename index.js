@@ -10,8 +10,8 @@ const { spawn, spawnSync } = require('child_process');
 
 process.umask(0o077);
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 14421; // 只需要改这里：也可用环境变量 PORT 覆盖
-const SNI_HOST = 'www.bing.com'; // 固定 SNI
+const PORT = process.env.PORT ? Number(process.env.PORT) : 14421; 
+const SNI_HOST = 'www.bing.com'; 
 
 const BASE_DIR = '/home/container/.hy2';
 const BIN = path.join(BASE_DIR, 'hysteria');
@@ -29,8 +29,7 @@ function sleep(ms) {
 
 function fatal(msg) {
   log(`[fatal] ${msg}`);
-  // 模拟 bash 的 tail -f /dev/null：保持进程在线避免面板误判
-  // eslint-disable-next-line no-empty-function
+
   return new Promise(() => {});
 }
 
@@ -87,7 +86,6 @@ async function fetchText(url) {
     const request = (u, redirectsLeft = 5) => {
       https
         .get(u, (res) => {
-          // handle redirects
           if (
             res.statusCode &&
             res.statusCode >= 300 &&
@@ -118,7 +116,7 @@ async function fetchText(url) {
 
 async function downloadToFile(url, destPath, mode = 0o700) {
   await new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath, { mode: 0o600 }); // 先落地为 600，再 chmod 到 700
+    const file = fs.createWriteStream(destPath, { mode: 0o600 }); 
     const request = (u, redirectsLeft = 5) => {
       https
         .get(u, (res) => {
@@ -156,7 +154,7 @@ async function downloadToFile(url, destPath, mode = 0o700) {
 }
 
 function pickAsset() {
-  const arch = os.arch(); // x64, arm64, arm, ia32, ...
+  const arch = os.arch(); 
   if (arch === 'x64') {
     let cpuinfo = '';
     try {
@@ -169,14 +167,12 @@ function pickAsset() {
   if (arch === 'arm') return 'hysteria-linux-arm';
   if (arch === 'ia32') return 'hysteria-linux-386';
 
-  // 下面这些在 node 的 os.arch() 里不常见，但保留逻辑口子
   if (arch === 'riscv64') return 'hysteria-linux-riscv64';
   if (arch === 's390x') return 'hysteria-linux-s390x';
 
   return '';
 }
 
-// ========= logging (console + file) =========
 ensureDir(BASE_DIR);
 const logStream = fs.createWriteStream(LOG, { flags: 'a', mode: 0o600 });
 function log(line) {
@@ -192,7 +188,6 @@ process.on('unhandledRejection', (e) => {
   log(`[unhandledRejection] ${e?.stack || e}`);
 });
 
-// ========= main =========
 (async () => {
   if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
     await fatal(`invalid PORT=${process.env.PORT}`);
@@ -201,7 +196,6 @@ process.on('unhandledRejection', (e) => {
 
   log(`[init] base_dir=${BASE_DIR} port=${PORT} sni=${SNI_HOST}`);
 
-  // ===== lock (pid file) =====
   if (fs.existsSync(LOCKFILE)) {
     const prev = readTextIfExists(LOCKFILE).trim();
     const prevPid = Number(prev);
@@ -231,9 +225,8 @@ process.on('unhandledRejection', (e) => {
   };
   process.on('exit', cleanup);
 
-  // ===== state (fixed auth + node name) =====
   if (!fs.existsSync(STATE)) {
-    const AUTH_PASS = crypto.randomBytes(18).toString('hex'); // 36 hex
+    const AUTH_PASS = crypto.randomBytes(18).toString('hex'); 
     const NODE_NAME = `hy2-${crypto.randomBytes(3).toString('hex')}`;
     const content = `AUTH_PASS='${AUTH_PASS}'\nNODE_NAME='${NODE_NAME}'\n`;
     writeFileSecure(STATE, content, 0o600);
@@ -250,7 +243,6 @@ process.on('unhandledRejection', (e) => {
     return;
   }
 
-  // ===== download hysteria binary =====
   const asset = pickAsset();
   if (!asset) {
     await fatal(`unsupported arch: ${os.arch()}`);
@@ -268,7 +260,6 @@ process.on('unhandledRejection', (e) => {
     }
   }
 
-  // ===== cert generation / validation =====
   if (!opensslAvailable()) {
     await fatal('openssl not found; cannot generate/validate cert');
     return;
@@ -289,7 +280,6 @@ process.on('unhandledRejection', (e) => {
   if (needCert) {
     log(`[tls] generating self-signed cert with SAN=DNS:${SNI_HOST}`);
 
-    // try -addext first (openssl 1.1.1+)
     const r1 = runOpenSSL(
       [
         'req',
@@ -350,7 +340,6 @@ subjectAltName=DNS:${SNI_HOST}
     }
   }
 
-  // ===== pinSHA256 =====
   const fp = runOpenSSL(['x509', '-noout', '-fingerprint', '-sha256', '-in', CERT], {
     encoding: 'utf8',
   });
@@ -363,7 +352,6 @@ subjectAltName=DNS:${SNI_HOST}
   }
   const pinEsc = encodeURIComponent(pinRaw); // ":" -> %3A
 
-  // ===== write config.yaml =====
   const confYaml = `listen: :${PORT}
 
 tls:
@@ -377,7 +365,6 @@ auth:
 `;
   writeFileSecure(CONF, confYaml, 0o600);
 
-  // ===== host + node uri =====
   let host = (process.env.NODE_HOST || '').trim();
   if (!host) host = (await fetchText('https://api.ipify.org')) || '';
   if (!host) host = 'your_host';
@@ -397,7 +384,6 @@ Notes:
   log(`[node] pinned: ${uriPinned}`);
   log(`[node] basic : ${uriBasic}`);
 
-  // ===== daemon loop with backoff =====
   let child = null;
   let stopping = false;
 
@@ -424,7 +410,6 @@ Notes:
 
     child = spawn(BIN, ['server', '-c', CONF], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-    // pipe child logs to console + file (raw bytes)
     child.stdout.on('data', (d) => {
       process.stdout.write(d);
       logStream.write(d);
@@ -453,3 +438,4 @@ Notes:
 })().catch(async (e) => {
   await fatal(e?.stack || String(e));
 });
+
