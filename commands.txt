@@ -45,5 +45,4 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
-# ---- 3) 直接跑（不需要 npm install）----
 exec node index.js
